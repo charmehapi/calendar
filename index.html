@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="カレンダー">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
 <title>マイカレンダー</title>
 <style>
 :root{box-sizing:border-box;--bg:#fffafc;--fg:#4a4458;--sub:#a79fb5;--line:#f1e6ef;--accent:#ee8fb2;--sun:#ef7f8f;--satc:#7aa7e0;--sheet:#fffdfe;--dim:#fbf3f8;--field:#f7ecf4;color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -57,10 +59,12 @@ button.del{color:var(--sun)}
 #lbox{width:min(320px,86%);text-align:center}#lbox h2{margin:0 0 18px;font-size:20px}#lbox input{width:100%;box-sizing:border-box;font:inherit;font-size:16px;color:var(--fg);background:var(--field);border:0;border-radius:12px;padding:12px;margin-bottom:10px}#lbox button{width:100%;padding:12px;font-size:16px}#lerr{color:var(--sun);font-size:13px;margin-top:10px;min-height:18px}#lload{color:var(--sub)}
 .swr{position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
 .swr .item{position:relative;background:var(--sheet);border-bottom:0;touch-action:pan-y;transition:transform .18s}
-.acts{position:absolute;right:0;top:0;bottom:0;width:186px;display:flex}
+.acts{position:absolute;right:0;top:0;bottom:0;width:140px;display:flex}
 .acts button{flex:1;border-radius:0;color:#fff;font-size:13px;padding:0}
 .a-ed{background:#8fb8f0}.a-cp{background:#b9a2e8}.a-dl{background:#ef8f9f}
 .eh{position:sticky;top:0;margin:-16px -16px 16px;padding:10px 16px;background:var(--sheet);z-index:2;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}input,textarea{-webkit-user-select:text;user-select:text}
+.chip.cs{border-radius:6px 0 0 6px;margin-right:-2px}.chip.cm{border-radius:0;margin-left:-2px;margin-right:-2px}.chip.ce{border-radius:0 6px 6px 0;margin-left:-2px}
 #toast{position:fixed;left:50%;top:64px;transform:translateX(-50%);background:rgba(40,40,40,.92);color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;display:none;z-index:200}
 </style>
 </head>
@@ -87,15 +91,29 @@ function saveNames(){try{localStorage.setItem('cal-colornames',JSON.stringify(cn
 var corder=[];try{corder=JSON.parse(localStorage.getItem('cal-colororder')||'[]')}catch(e){corder=[]}
 function ordered(){var o=corder.filter(function(c){return COLORS.indexOf(c)>=0});COLORS.forEach(function(c){if(o.indexOf(c)<0)o.push(c)});return o}
 function saveOrder(){try{localStorage.setItem('cal-colororder',JSON.stringify(ordered()))}catch(e){}if(window.cloudSave)window.cloudSave()}
+var DEFAULT_STAMPS=['🍻','🍽️','🎂','🎉','✈️','💼','🏥','📞','🏃','🎮','🛒','📚','🚗','🎬','💇','✂️','💅','💆','🛁','💄','🌸','🦷','💊','🏋️','☕','🎤','🎁','❤️'];
+var stamps=DEFAULT_STAMPS.slice();
+try{var _s=JSON.parse(localStorage.getItem('cal-stamps')||'null');if(Array.isArray(_s)&&_s.length)stamps=_s}catch(e){}
+function saveStamps(){try{localStorage.setItem('cal-stamps',JSON.stringify(stamps))}catch(e){}if(window.cloudSave)window.cloudSave()}
+function splitEmoji(t){var a=[];try{var sg=new Intl.Segmenter(undefined,{granularity:'grapheme'});for(var x of sg.segment(t)){if(x.segment.trim())a.push(x.segment)}}catch(e){a=Array.from(t.replace(/\s/g,''))}return a.slice(0,48)}
 function save(){try{localStorage.setItem('cal-events',JSON.stringify(events))}catch(e){}if(window.cloudSave)window.cloudSave()}
 function pad(n){return String(n).padStart(2,'0')}
 function ds(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
-function cmp(a,b){return a.allDay===b.allDay?(a.start||'').localeCompare(b.start||''):(a.allDay?-1:1)}
+function cmp(a,b){if(isM(a)!==isM(b))return isM(a)?-1:1;if(isM(a)&&a.date!==b.date)return a.date<b.date?-1:1;return a.allDay===b.allDay?(a.start||'').localeCompare(b.start||''):(a.allDay?-1:1)}
 function label(e){return (e.stamp?e.stamp+' ':'')+(e.allDay||!e.start||window.innerWidth<600?'':e.start+' ')+e.title}
 function toast(t){var x=$('#toast');x.textContent=t;x.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(function(){x.style.display='none'},1400)}
-function mkChip(e){var c=document.createElement('div');c.className='chip';c.dataset.id=e.id;c.textContent=label(e);c.style.background=e.color;return c}
+function isM(e){return !!(e.endDate&&e.endDate>e.date)}
+function inDay(e,s){return e.date<=s&&(e.endDate||e.date)>=s}
+function addDays(s,n){var d=new Date(s+'T00:00');d.setDate(d.getDate()+n);return ds(d)}
+function dayDiff(a,b){return Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/864e5)}
+function moveEv(ev,date){if(ev.endDate)ev.endDate=addDays(date,dayDiff(ev.date,ev.endDate));ev.date=date}
+function mkChip(e,s,col){
+  var c=document.createElement('div');c.className='chip';c.dataset.id=e.id;
+  var t=label(e);
+  if(s&&isM(e)){var st=s===e.date;c.classList.add(st?'cs':(s===e.endDate?'ce':'cm'));if(!st&&col!==0)t='\u00a0'}
+  c.textContent=t;c.style.background=e.color;return c}
 function shift(n){cur=new Date(cur.getFullYear(),cur.getMonth()+n,1);render()}
 function render(){
   var y=cur.getFullYear(),m=cur.getMonth();
@@ -107,8 +125,8 @@ function render(){
     c.className='cell'+(d.getMonth()!==m?' other':'')+(i%7===0?' sun':'')+(i%7===6?' sat':'');
     c.dataset.date=s;if(s===sel)c.classList.add('selc');
     var n=document.createElement('div');n.className='num'+(s===today?' today':'');n.textContent=d.getDate();c.appendChild(n);
-    var list=events.filter(function(e){return e.date===s}).sort(cmp);
-    list.slice(0,2).forEach(function(e){c.appendChild(mkChip(e))});
+    var list=events.filter(function(e){return inDay(e,s)}).sort(cmp);
+    list.slice(0,2).forEach(function(e){c.appendChild(mkChip(e,s,i%7))});
     if(list.length>2){var mo=document.createElement('div');mo.className='more';mo.textContent='+'+(list.length-2);c.appendChild(mo)}
     g.appendChild(c);
   }
@@ -130,8 +148,8 @@ function openDayOld(s){
 function openEdit(id,date){
   var ex=id?events.find(function(e){return e.id===id}):null;
   var e=ex||{title:'',date:date,allDay:false,start:'09:00',end:'10:00',color:COLORS[5],memo:''},col=e.color,stp=e.stamp||'';
-  sheet('<div class="eh"><button id="fc">キャンセル</button><b>'+(ex?'予定を編集':'予定を追加')+'</b><button class="pri" id="fv">保存</button></div><input id="ft" placeholder="タイトル"><div class="row"><input id="fd" type="date"><label><input id="fa" type="checkbox">終日</label></div><div class="row" id="ftm"><input id="fs" type="time"><span>〜</span><input id="fe" type="time"></div><div id="sw"></div><div class="row"><input id="cn" placeholder="この色の名前（例：プライベート）"><button id="cl">← 左へ</button><button id="cr">右へ →</button></div><div id="st"></div><textarea id="fm" rows="3" placeholder="メモ"></textarea>'+(ex?'<div class="row btns"><button class="del" id="fx">削除</button><button id="fk">この日付にコピー</button></div>':'')+'');
-  $('#ft').value=e.title;$('#fd').value=e.date;$('#fa').checked=!!e.allDay;$('#fs').value=e.start||'';$('#fe').value=e.end||'';$('#fm').value=e.memo||'';
+  sheet('<div class="eh"><button id="fc">キャンセル</button><b>'+(ex?'予定を編集':'予定を追加')+'</b><button class="pri" id="fv">保存</button></div><input id="ft" placeholder="タイトル"><div class="row"><input id="fd" type="date"><label><input id="fa" type="checkbox">終日</label></div><div class="row"><span style="font-size:13px;color:var(--sub);white-space:nowrap">終了日（2日以上のとき）</span><input id="fd2" type="date"></div><div class="row" id="ftm"><input id="fs" type="time"><span>〜</span><input id="fe" type="time"></div><div id="sw"></div><div class="row"><input id="cn" placeholder="この色の名前（例：プライベート）"><button id="cl">← 左へ</button><button id="cr">右へ →</button></div><div id="st"></div><textarea id="fm" rows="3" placeholder="メモ"></textarea>'+(ex?'<div class="row btns"><button class="del" id="fx">削除</button><button id="fk">この日付にコピー</button></div>':'')+'');
+  $('#ft').value=e.title;$('#fd').value=e.date;$('#fd2').value=e.endDate||'';$('#fa').checked=!!e.allDay;$('#fs').value=e.start||'';$('#fe').value=e.end||'';$('#fm').value=e.memo||'';
   function tm(){$('#ftm').style.display=$('#fa').checked?'none':'flex'}
   tm();$('#fa').onchange=tm;
   function lbl(c){return cnames[c]||''}
@@ -141,12 +159,12 @@ function openEdit(id,date){
   $('#cn').oninput=function(){var v=$('#cn').value.trim();if(v)cnames[col]=v;else delete cnames[col];saveNames();buildSw()};
   function mv(d){var o=ordered(),i=o.indexOf(col),j=i+d;if(i<0||j<0||j>=o.length)return;o.splice(i,1);o.splice(j,0,col);corder=o;saveOrder();buildSw()}
   $('#cl').onclick=function(){mv(-1)};$('#cr').onclick=function(){mv(1)};
-  ['','🍻','🍽️','🎂','🎉','✈️','💼','🏥','📞','🏃','🎮','🛒','📚','🚗','🎬','💇','✂️','💅','💆','🛁','💄','🌸','🦷','💊','🏋️','🧘','☕','🎤','🎁','🐶','❤️','💰'].forEach(function(s){var b=document.createElement('span');b.className='stp'+(s===stp?' sel':'');b.textContent=s||'なし';if(!s)b.style.fontSize='11px';b.onclick=function(){stp=s;document.querySelectorAll('.stp').forEach(function(x){x.classList.remove('sel')});b.classList.add('sel')};$('#st').appendChild(b)});
+  [''].concat(stamps).forEach(function(s){var b=document.createElement('span');b.className='stp'+(s===stp?' sel':'');b.textContent=s||'なし';if(!s)b.style.fontSize='11px';b.onclick=function(){stp=s;document.querySelectorAll('.stp').forEach(function(x){x.classList.remove('sel')});b.classList.add('sel')};$('#st').appendChild(b)});
   $('#fc').onclick=closeSheet;if(!ex)$('#ft').focus();
-  if(ex)$('#fk').onclick=function(){var d=$('#fd').value;if(!d||d===ex.date){toast('先に上の日付をコピー先に変えてください');return}events.push({id:uid(),title:$('#ft').value.trim()||'（無題）',date:d,allDay:$('#fa').checked,start:$('#fs').value,end:$('#fe').value,color:col,stamp:stp,memo:$('#fm').value});save();render();closeSheet();toast('コピーしました')};
+  if(ex)$('#fk').onclick=function(){var d=$('#fd').value;if(!d||d===ex.date){toast('先に上の日付をコピー先に変えてください');return}events.push({id:uid(),title:$('#ft').value.trim()||'（無題）',date:d,endDate:($('#fd2').value>d?$('#fd2').value:''),allDay:$('#fa').checked,start:$('#fs').value,end:$('#fe').value,color:col,stamp:stp,memo:$('#fm').value});save();render();closeSheet();toast('コピーしました')};
   if(ex)$('#fx').onclick=function(){events=events.filter(function(x){return x.id!==ex.id});save();render();closeSheet()};
   $('#fv').onclick=function(){
-    var o={id:ex?ex.id:uid(),title:$('#ft').value.trim()||'（無題）',date:$('#fd').value||date||ds(new Date()),allDay:$('#fa').checked,start:$('#fs').value,end:$('#fe').value,color:col,stamp:stp,memo:$('#fm').value};
+    var o={id:ex?ex.id:uid(),title:$('#ft').value.trim()||'（無題）',date:$('#fd').value||date||ds(new Date()),endDate:($('#fd2').value>($('#fd').value||date||'')?$('#fd2').value:''),allDay:$('#fa').checked,start:$('#fs').value,end:$('#fe').value,color:col,stamp:stp,memo:$('#fm').value};
     if(ex)Object.assign(ex,o);else events.push(o);
     sel=o.date;selId=null;
     save();render();closeSheet();
@@ -161,11 +179,11 @@ function tapEvent(id,el){
   var ev=events.find(function(x){return x.id===id});if(!ev)return;
   sel=ev.date;selId=null;render();
 }
-function copyTo(date){var c=Object.assign({},copySrc);c.id=uid();c.date=date;events.push(c);save();toast(fmtD(date)+'にコピーしました');render()}
+function copyTo(date){var c=Object.assign({},copySrc);c.id=uid();moveEv(c,date);events.push(c);save();toast(fmtD(date)+'にコピーしました');render()}
 var openRow=null,lastSwipe=0;
 function closeRow(r){if(!r)return;r.classList.remove('open');r.querySelector('.item').style.transform=''}
 function bindSwipe(r){
-  var c=r.querySelector('.item'),id=r.dataset.id,W=186,x0=0,y0=0,base=0,dx=0,drag=false,on=false;
+  var c=r.querySelector('.item'),id=r.dataset.id,W=140,x0=0,y0=0,base=0,dx=0,drag=false,on=false;
   c.addEventListener('pointerdown',function(e){on=true;drag=false;x0=e.clientX;y0=e.clientY;dx=0;base=r.classList.contains('open')?-W:0});
   c.addEventListener('pointermove',function(e){
     if(!on)return;dx=e.clientX-x0;var dy=e.clientY-y0;
@@ -180,9 +198,9 @@ function bindSwipe(r){
   c.addEventListener('click',function(){
     if(Date.now()-lastSwipe<300)return;
     if(r.classList.contains('open')){closeRow(r);openRow=null;return}
-    selId=id;render();
+    openEdit(id);
   });
-  r.querySelector('.a-ed').onclick=function(){openEdit(id)};
+  
   r.querySelector('.a-cp').onclick=function(){copySrc=events.find(function(x){return x.id===id});render()};
   r.querySelector('.a-dl').onclick=function(){events=events.filter(function(x){return x.id!==id});save();render()};
 }
@@ -202,17 +220,20 @@ function panel(){
     $('#ped').onclick=function(){openEdit(ev.id)};
     return;
   }
-  var list=events.filter(function(e){return e.date===sel}).sort(cmp);
+  var list=events.filter(function(e){return inDay(e,sel)}).sort(cmp);
   h='<div class="pt">'+fmtD(sel)+'</div>';
-  list.forEach(function(e){h+='<div class="swr" data-id="'+e.id+'"><div class="acts"><button class="a-ed">編集</button><button class="a-cp">コピー</button><button class="a-dl">削除</button></div><div class="item"><span class="dot" style="background:'+e.color+'"></span><span>'+esc((e.stamp?e.stamp+' ':'')+e.title)+' <small>'+(e.allDay?'終日':esc(e.start||'')+(e.end?'〜'+esc(e.end):''))+'</small></span></div></div>'});
+  list.forEach(function(e){h+='<div class="swr" data-id="'+e.id+'"><div class="acts"><button class="a-cp">コピー</button><button class="a-dl">削除</button></div><div class="item"><span class="dot" style="background:'+e.color+'"></span><span>'+esc((e.stamp?e.stamp+' ':'')+e.title)+' <small>'+(e.allDay?'終日':esc(e.start||'')+(e.end?'〜'+esc(e.end):''))+(isM(e)?' '+e.date.slice(5).replace('-','/')+'〜'+e.endDate.slice(5).replace('-','/'):'')+'</small></span></div></div>'});
   if(!list.length)h+='<div class="ps">予定はありません（「＋追加」で追加）</div>';
   p.innerHTML=h;
   p.querySelectorAll('.swr').forEach(bindSwipe);
 }
 function openCfg(){
-  sheet('<h3>バックアップ</h3><p style="font-size:13px;color:var(--sub);margin:0 0 8px">下の文字列をコピーして、メモなどに保存しておけます。別の端末やブラウザに貼り付ければ復元できます。</p><textarea id="cj" rows="8"></textarea><div class="row btns"><button id="cb">閉じる</button><button id="cp">コピー</button><button class="pri" id="ci">この内容で置き換える</button></div><div class="row btns"><button class="del" id="co">ログアウト</button></div>');
+  sheet('<h3>スタンプの編集</h3><p class="ps">使いたい絵文字を並べて入力してください（スペースは不要です）。</p><textarea id="sti" rows="2"></textarea><div class="row btns"><button id="str">初期に戻す</button><button class="pri" id="sts">スタンプを保存</button></div><h3>バックアップ</h3><p style="font-size:13px;color:var(--sub);margin:0 0 8px">下の文字列をコピーして、メモなどに保存しておけます。別の端末やブラウザに貼り付ければ復元できます。</p><textarea id="cj" rows="8"></textarea><div class="row btns"><button id="cb">閉じる</button><button id="cp">コピー</button><button class="pri" id="ci">この内容で置き換える</button></div><div class="row btns"><button class="del" id="co">ログアウト</button></div>');
   $('#cj').value=JSON.stringify({events:events,names:cnames,order:ordered()});
   $('#cb').onclick=closeSheet;
+  $('#sti').value=stamps.join('');
+  $('#sts').onclick=function(){var a=splitEmoji($('#sti').value);if(!a.length){toast('絵文字を入力してください');return}stamps=a;saveStamps();toast('スタンプを保存しました')};
+  $('#str').onclick=function(){stamps=DEFAULT_STAMPS.slice();saveStamps();$('#sti').value=stamps.join('');toast('初期に戻しました')};
   $('#co').onclick=function(){if(window.cloudLogout)window.cloudLogout();else toast('ログアウトできません')};
   $('#cp').onclick=function(){var t=$('#cj');t.select();try{if(navigator.clipboard)navigator.clipboard.writeText(t.value);else document.execCommand('copy');toast('コピーしました')}catch(x){toast('手動でコピーしてください')}};
   $('#ci').onclick=function(){try{var a=JSON.parse($('#cj').value);if(Array.isArray(a)){events=a}else if(a&&Array.isArray(a.events)){events=a.events;cnames=a.names||{};saveNames();corder=a.order||[];saveOrder()}else throw 0;save();render();closeSheet();toast('読み込みました')}catch(x){toast('形式が正しくありません')}};
@@ -257,8 +278,8 @@ function onUp(e){
   if(!cell)return;
   var ev=events.find(function(x){return x.id===p.id});if(!ev)return;
   var date=cell.dataset.date,copy=copyMode||e.ctrlKey||e.altKey;
-  if(copy){var c=Object.assign({},ev);c.id=uid();c.date=date;events.push(c);toast('コピーしました')}
-  else if(ev.date!==date){ev.date=date;toast('移動しました')}
+  if(copy){var c=Object.assign({},ev);c.id=uid();moveEv(c,date);events.push(c);toast('コピーしました')}
+  else if(ev.date!==date){moveEv(ev,date);toast('移動しました')}
   else return;
   save();render();
 }
@@ -273,6 +294,7 @@ $('#grid').addEventListener('click',function(e){
   var c=e.target.closest('.cell');if(c){if(copySrc)copyTo(c.dataset.date);else selectDay(c.dataset.date)}
 });
 $('#grid').addEventListener('contextmenu',function(e){e.preventDefault()});
+document.addEventListener('selectstart',function(e){var n=e.target.nodeType===1?e.target:e.target.parentElement;if(!n||!n.closest('input,textarea'))e.preventDefault()});
 $('#prev').onclick=function(){shift(-1)};
 $('#next').onclick=function(){shift(1)};
 $('#today').onclick=function(){cur=new Date();cur.setDate(1);sel=ds(new Date());selId=null;render()};
@@ -307,7 +329,7 @@ function showLogin(v){
   q('#lbox').style.display=v?'block':'none';
   q('#lload').style.display='none';
 }
-function payload(){return {events:window.events||[],names:window.cnames||{},order:window.ordered?window.ordered():[],updated:Date.now()}}
+function payload(){return {events:window.events||[],names:window.cnames||{},order:window.ordered?window.ordered():[],stamps:window.stamps||[],updated:Date.now()}}
 window.cloudSave=function(){
   if(!ref||!ready)return;
   badge('⏳','保存中');
@@ -317,11 +339,11 @@ window.cloudSave=function(){
   },300);
 };
 function apply(d){
-  window.events=d.events||[];window.cnames=d.names||{};window.corder=d.order||[];
+  window.events=d.events||[];window.cnames=d.names||{};window.corder=d.order||[];if(d.stamps&&d.stamps.length)window.stamps=d.stamps;
   try{
     localStorage.setItem('cal-events',JSON.stringify(window.events));
     localStorage.setItem('cal-colornames',JSON.stringify(window.cnames));
-    localStorage.setItem('cal-colororder',JSON.stringify(window.corder));
+    localStorage.setItem('cal-colororder',JSON.stringify(window.corder));localStorage.setItem('cal-stamps',JSON.stringify(window.stamps));
   }catch(e){}
   window.render();
 }
