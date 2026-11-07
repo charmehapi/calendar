@@ -65,6 +65,8 @@ button.del{color:var(--sun)}
 .eh{position:sticky;top:0;margin:-16px -16px 16px;padding:10px 16px;background:var(--sheet);z-index:2;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}input,textarea{-webkit-user-select:text;user-select:text}
 .chip.cs{border-radius:6px 0 0 6px;margin-right:-2px}.chip.cm{border-radius:0;margin-left:-2px;margin-right:-2px}.chip.ce{border-radius:0 6px 6px 0;margin-left:-2px}
+.chip{box-sizing:border-box}.sp{height:16px}
+@supports (overflow:clip){.cell{overflow-x:visible;overflow-y:clip}}
 #toast{position:fixed;left:50%;top:64px;transform:translateX(-50%);background:rgba(40,40,40,.92);color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;display:none;z-index:200}
 </style>
 </head>
@@ -109,6 +111,38 @@ function inDay(e,s){return e.date<=s&&(e.endDate||e.date)>=s}
 function addDays(s,n){var d=new Date(s+'T00:00');d.setDate(d.getDate()+n);return ds(d)}
 function dayDiff(a,b){return Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/864e5)}
 function moveEv(ev,date){if(ev.endDate)ev.endDate=addDays(date,dayDiff(ev.date,ev.endDate));ev.date=date}
+var CAP=2;
+function weekLayout(start,i0){
+  var days=[];for(var k=0;k<7;k++)days.push(ds(new Date(start.getFullYear(),start.getMonth(),start.getDate()+i0+k)));
+  var segs=events.filter(function(e){return isM(e)&&e.date<=days[6]&&e.endDate>=days[0]}).map(function(e){return {e:e,a:Math.max(0,dayDiff(days[0],e.date)),b:Math.min(6,dayDiff(days[0],e.endDate)),sh:e.date>=days[0],eh:e.endDate<=days[6]}});
+  segs.sort(function(x,y){return x.a-y.a||(y.b-y.a)-(x.b-x.a)||(x.e.date<y.e.date?-1:1)});
+  var occ=[];
+  segs.forEach(function(g){for(var k=0;;k++){occ[k]=occ[k]||[null,null,null,null,null,null,null];var ok=true;for(var j=g.a;j<=g.b;j++)if(occ[k][j]){ok=false;break}if(ok){for(var j2=g.a;j2<=g.b;j2++)occ[k][j2]=g;break}}});
+  return {days:days,occ:occ};
+}
+function segChip(g){
+  var n=g.b-g.a+1,c=mkChip(g.e,null,0);
+  c.style.width='calc('+(n*100)+'% + '+(3*n-3)+'px)';
+  c.style.position='relative';c.style.zIndex=3;
+  var rl=g.sh?'6px':'0',rr=g.eh?'6px':'0';
+  c.style.borderRadius=rl+' '+rr+' '+rr+' '+rl;
+  return c;
+}
+function fillCell(c,col,s,wk){
+  var all=events.filter(function(e){return inDay(e,s)}),shown=0,Ld=0,k;
+  for(k=0;k<Math.min(wk.occ.length,CAP);k++)if(wk.occ[k][col])Ld=k+1;
+  for(k=0;k<Ld;k++){
+    var g=wk.occ[k][col];
+    if(g)shown++;
+    if(g&&g.a===col)c.appendChild(segChip(g));
+    else{var sp=document.createElement('div');sp.className='sp';c.appendChild(sp)}
+  }
+  var singles=all.filter(function(e){return !isM(e)}).sort(cmp),room=Math.max(0,CAP-Ld);
+  singles.slice(0,room).forEach(function(e){c.appendChild(mkChip(e,null,0))});
+  var hidden=all.length-shown-Math.min(room,singles.length);
+  if(hidden>0){var mo=document.createElement('div');mo.className='more';mo.textContent='+'+hidden;c.appendChild(mo)}
+}
+function cellAt(x,y){var g=$('#grid'),r=g.getBoundingClientRect();if(x<r.left||x>=r.right||y<r.top||y>=r.bottom)return null;var c=Math.floor((x-r.left)/(r.width/7)),w=Math.floor((y-r.top)/(r.height/6));return g.children[w*7+c]||null}
 function mkChip(e,s,col){
   var c=document.createElement('div');c.className='chip';c.dataset.id=e.id;
   var t=label(e);
@@ -119,18 +153,16 @@ function render(){
   var y=cur.getFullYear(),m=cur.getMonth();
   $('#title').textContent=y+'年'+(m+1)+'月';
   var start=new Date(y,m,1-new Date(y,m,1).getDay()),today=ds(new Date()),g=$('#grid');
-  g.innerHTML='';
+  panel();g.innerHTML='';var wk=null;CAP=Math.max(2,Math.min(4,Math.floor((g.clientHeight/6-34)/16)));
   for(var i=0;i<42;i++){
     var d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i),s=ds(d),c=document.createElement('div');
     c.className='cell'+(d.getMonth()!==m?' other':'')+(i%7===0?' sun':'')+(i%7===6?' sat':'');
     c.dataset.date=s;if(s===sel)c.classList.add('selc');
     var n=document.createElement('div');n.className='num'+(s===today?' today':'');n.textContent=d.getDate();c.appendChild(n);
-    var list=events.filter(function(e){return inDay(e,s)}).sort(cmp);
-    list.slice(0,2).forEach(function(e){c.appendChild(mkChip(e,s,i%7))});
-    if(list.length>2){var mo=document.createElement('div');mo.className='more';mo.textContent='+'+(list.length-2);c.appendChild(mo)}
+    if(i%7===0)wk=weekLayout(start,i);
+    fillCell(c,i%7,s,wk);
     g.appendChild(c);
   }
-  panel();
 }
 function sheet(h){$('#sheet').innerHTML=h;$('#ov').style.display='flex';$('#sheet').scrollTop=0}
 function closeSheet(){$('#ov').style.display='none'}
@@ -147,11 +179,17 @@ function openDayOld(s){
 }
 function openEdit(id,date){
   var ex=id?events.find(function(e){return e.id===id}):null;
-  var e=ex||{title:'',date:date,allDay:false,start:'09:00',end:'10:00',color:COLORS[5],memo:''},col=e.color,stp=e.stamp||'';
-  sheet('<div class="eh"><button id="fc">キャンセル</button><b>'+(ex?'予定を編集':'予定を追加')+'</b><button class="pri" id="fv">保存</button></div><input id="ft" placeholder="タイトル"><div class="row"><input id="fd" type="date"><label><input id="fa" type="checkbox">終日</label></div><div class="row"><span style="font-size:13px;color:var(--sub);white-space:nowrap">終了日（2日以上のとき）</span><input id="fd2" type="date"></div><div class="row" id="ftm"><input id="fs" type="time"><span>〜</span><input id="fe" type="time"></div><div id="sw"></div><div class="row"><input id="cn" placeholder="この色の名前（例：プライベート）"><button id="cl">← 左へ</button><button id="cr">右へ →</button></div><div id="st"></div><textarea id="fm" rows="3" placeholder="メモ"></textarea>'+(ex?'<div class="row btns"><button class="del" id="fx">削除</button><button id="fk">この日付にコピー</button></div>':'')+'');
+  var e=ex||{title:'',date:date,allDay:true,start:'09:00',end:'10:00',color:COLORS[5],memo:''},col=e.color,stp=e.stamp||'';
+  sheet('<div class="eh"><button id="fc">キャンセル</button><b>'+(ex?'予定を編集':'予定を追加')+'</b><button class="pri" id="fv">保存</button></div><input id="ft" placeholder="タイトル"><div class="row"><input id="fd" type="date"><label><input id="fa" type="checkbox">終日</label></div><div class="row"><span style="font-size:13px;color:var(--sub);white-space:nowrap">終了日</span><input id="fd2" type="date"><button id="fd2x">消す</button></div><div class="row" id="ftm"><input id="fs" type="time"><span>〜</span><input id="fe" type="time"></div><div id="sw"></div><div class="row"><input id="cn" placeholder="この色の名前（例：プライベート）"><button id="cl">← 左へ</button><button id="cr">右へ →</button></div><div id="st"></div><textarea id="fm" rows="3" placeholder="メモ"></textarea>'+(ex?'<div class="row btns"><button class="del" id="fx">削除</button><button id="fk">この日付にコピー</button></div>':'')+'');
   $('#ft').value=e.title;$('#fd').value=e.date;$('#fd2').value=e.endDate||'';$('#fa').checked=!!e.allDay;$('#fs').value=e.start||'';$('#fe').value=e.end||'';$('#fm').value=e.memo||'';
   function tm(){$('#ftm').style.display=$('#fa').checked?'none':'flex'}
   tm();$('#fa').onchange=tm;
+  var fd=$('#fd'),fd2=$('#fd2'),prevStart=fd.value;
+  function setMin(){if(fd.value)fd2.min=addDays(fd.value,1)}
+  setMin();
+  fd.onchange=function(){if(fd2.value&&prevStart&&fd.value)fd2.value=addDays(fd.value,dayDiff(prevStart,fd2.value));prevStart=fd.value;setMin()};
+  fd2.onfocus=function(){if(!fd2.value&&fd.value)fd2.value=addDays(fd.value,1)};
+  $('#fd2x').onclick=function(){fd2.value=''};
   function lbl(c){return cnames[c]||''}
   function buildSw(){$('#sw').innerHTML='';ordered().forEach(function(c){var w=document.createElement('div');w.className='swc';var s=document.createElement('span');s.className='sw'+(c===col?' sel':'');s.style.background=c;var n=document.createElement('span');n.className='swn';n.textContent=lbl(c);w.appendChild(s);w.appendChild(n);w.onclick=function(){col=c;document.querySelectorAll('.sw').forEach(function(x){x.classList.remove('sel')});s.classList.add('sel');$('#cn').value=lbl(c)};$('#sw').appendChild(w)})}
   buildSw();
@@ -161,10 +199,10 @@ function openEdit(id,date){
   $('#cl').onclick=function(){mv(-1)};$('#cr').onclick=function(){mv(1)};
   [''].concat(stamps).forEach(function(s){var b=document.createElement('span');b.className='stp'+(s===stp?' sel':'');b.textContent=s||'なし';if(!s)b.style.fontSize='11px';b.onclick=function(){stp=s;document.querySelectorAll('.stp').forEach(function(x){x.classList.remove('sel')});b.classList.add('sel')};$('#st').appendChild(b)});
   $('#fc').onclick=closeSheet;if(!ex)$('#ft').focus();
-  if(ex)$('#fk').onclick=function(){var d=$('#fd').value;if(!d||d===ex.date){toast('先に上の日付をコピー先に変えてください');return}events.push({id:uid(),title:$('#ft').value.trim()||'（無題）',date:d,endDate:($('#fd2').value>d?$('#fd2').value:''),allDay:$('#fa').checked,start:$('#fs').value,end:$('#fe').value,color:col,stamp:stp,memo:$('#fm').value});save();render();closeSheet();toast('コピーしました')};
+  if(ex)$('#fk').onclick=function(){var d=$('#fd').value;if(!d||d===ex.date){toast('先に上の日付をコピー先に変えてください');return}events.push({id:uid(),title:$('#ft').value.trim(),date:d,endDate:($('#fd2').value>d?$('#fd2').value:''),allDay:$('#fa').checked,start:$('#fs').value,end:$('#fe').value,color:col,stamp:stp,memo:$('#fm').value});save();render();closeSheet();toast('コピーしました')};
   if(ex)$('#fx').onclick=function(){events=events.filter(function(x){return x.id!==ex.id});save();render();closeSheet()};
   $('#fv').onclick=function(){
-    var o={id:ex?ex.id:uid(),title:$('#ft').value.trim()||'（無題）',date:$('#fd').value||date||ds(new Date()),endDate:($('#fd2').value>($('#fd').value||date||'')?$('#fd2').value:''),allDay:$('#fa').checked,start:$('#fs').value,end:$('#fe').value,color:col,stamp:stp,memo:$('#fm').value};
+    var o={id:ex?ex.id:uid(),title:$('#ft').value.trim(),date:$('#fd').value||date||ds(new Date()),endDate:($('#fd2').value>($('#fd').value||date||'')?$('#fd2').value:''),allDay:$('#fa').checked,start:$('#fs').value,end:$('#fe').value,color:col,stamp:stp,memo:$('#fm').value};
     if(ex)Object.assign(ex,o);else events.push(o);
     sel=o.date;selId=null;
     save();render();closeSheet();
@@ -261,7 +299,7 @@ function onMove(e){
   moveGhost(e.clientX,e.clientY);
   var el=document.elementFromPoint(e.clientX,e.clientY);
   document.querySelectorAll('.over').forEach(function(x){x.classList.remove('over')});
-  var cell=el&&el.closest('.cell');if(cell)cell.classList.add('over');
+  var cell=cellAt(e.clientX,e.clientY);if(cell)cell.classList.add('over');
   var nb=el&&el.closest('#prev,#next'),k=nb?nb.id:null;
   if(k!==navKey){stopNav();if(k){navKey=k;navTimer=setInterval(function(){shift(k==='next'?1:-1)},700)}}
 }
@@ -271,10 +309,10 @@ function onUp(e){
   clearTimeout(p.timer);stopNav();
   var g=$('#ghost');if(g)g.remove();
   document.querySelectorAll('.over,.src').forEach(function(x){x.classList.remove('over');x.classList.remove('src')});
-  if(!p.active){if(!p.dead&&e.type==='pointerup')tapEvent(p.id,p.el);return}
+  if(!p.active){if(!p.dead&&e.type==='pointerup')tapEvent(p.id,cellAt(e.clientX,e.clientY)||p.el);return}
   noClick=true;setTimeout(function(){noClick=false},400);
   if(e.type==='pointercancel')return;
-  var el=document.elementFromPoint(e.clientX,e.clientY),cell=el&&el.closest('.cell');
+  var cell=cellAt(e.clientX,e.clientY);
   if(!cell)return;
   var ev=events.find(function(x){return x.id===p.id});if(!ev)return;
   var date=cell.dataset.date,copy=copyMode||e.ctrlKey||e.altKey;
@@ -304,6 +342,7 @@ $('#addb').onclick=function(){openEdit(null,sel)};
 var sx=0,sy=0,sw=false;
 $('#grid').addEventListener('touchstart',function(e){var t=e.touches[0];sx=t.clientX;sy=t.clientY;sw=!e.target.closest('.chip')&&e.touches.length===1},{passive:true});
 $('#grid').addEventListener('touchend',function(e){if(!sw)return;sw=false;var t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5){noClick=true;setTimeout(function(){noClick=false},350);shift(dx<0?1:-1)}},{passive:true});
+window.addEventListener('resize',function(){render()});
 render();
 setTimeout(function(){if(!window.fbReady){$('#login').style.display='none';var b=$('#cloud');if(b){b.textContent='⚠️';b.title='オフライン（この端末のデータのみ）'}}},5000);
 </script>
