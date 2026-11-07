@@ -59,9 +59,9 @@ button.del{color:var(--sun)}
 #lbox{width:min(320px,86%);text-align:center}#lbox h2{margin:0 0 18px;font-size:20px}#lbox input{width:100%;box-sizing:border-box;font:inherit;font-size:16px;color:var(--fg);background:var(--field);border:0;border-radius:12px;padding:12px;margin-bottom:10px}#lbox button{width:100%;padding:12px;font-size:16px}#lerr{color:var(--sun);font-size:13px;margin-top:10px;min-height:18px}#lload{color:var(--sub)}
 .swr{position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
 .swr .item{position:relative;background:var(--sheet);border-bottom:0;touch-action:pan-y;transition:transform .18s}
-.acts{position:absolute;right:0;top:0;bottom:0;width:140px;display:flex}
+.acts{position:absolute;right:0;top:0;bottom:0;width:150px;display:flex}
 .acts button{flex:1;border-radius:0;color:#fff;font-size:13px;padding:0}
-.a-ed{background:#8fb8f0}.a-cp{background:#b9a2e8}.a-dl{background:#ef8f9f}
+.a-ed{background:#8fb8f0}.a-cp{background:#b9a2e8;flex:1.5}.a-dl{background:#ef8f9f}
 .eh{position:sticky;top:0;margin:-16px -16px 16px;padding:10px 16px;background:var(--sheet);z-index:2;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}input,textarea{-webkit-user-select:text;user-select:text}
 .chip.cs{border-radius:6px 0 0 6px;margin-right:-2px}.chip.cm{border-radius:0;margin-left:-2px;margin-right:-2px}.chip.ce{border-radius:0 6px 6px 0;margin-left:-2px}
@@ -208,7 +208,7 @@ function openEdit(id,date){
     save();render();closeSheet();
   };
 }
-var sel=ds(new Date()),selId=null,copySrc=null;
+var sel=ds(new Date()),selId=null,copySrc=null,moveMode=false;
 function fmtD(s){var d=new Date(s+'T00:00');return (d.getMonth()+1)+'月'+d.getDate()+'日（'+DOW[d.getDay()]+'）'}
 function selectDay(s){sel=s;selId=null;render()}
 function tapEvent(id,el){
@@ -217,11 +217,13 @@ function tapEvent(id,el){
   var ev=events.find(function(x){return x.id===id});if(!ev)return;
   sel=ev.date;selId=null;render();
 }
-function copyTo(date){var c=Object.assign({},copySrc);c.id=uid();moveEv(c,date);events.push(c);save();toast(fmtD(date)+'にコピーしました');render()}
+function copyTo(date){
+  if(moveMode){var mv=events.find(function(x){return x.id===copySrc.id});if(mv)moveEv(mv,date);copySrc=null;moveMode=false;sel=date;save();toast(fmtD(date)+'に移動しました');render();return}
+  var c=Object.assign({},copySrc);c.id=uid();moveEv(c,date);events.push(c);save();toast(fmtD(date)+'にコピーしました');render()}
 var openRow=null,lastSwipe=0;
 function closeRow(r){if(!r)return;r.classList.remove('open');r.querySelector('.item').style.transform=''}
 function bindSwipe(r){
-  var c=r.querySelector('.item'),id=r.dataset.id,W=140,x0=0,y0=0,base=0,dx=0,drag=false,on=false;
+  var c=r.querySelector('.item'),id=r.dataset.id,W=150,x0=0,y0=0,base=0,dx=0,drag=false,on=false;
   c.addEventListener('pointerdown',function(e){on=true;drag=false;x0=e.clientX;y0=e.clientY;dx=0;base=r.classList.contains('open')?-W:0});
   c.addEventListener('pointermove',function(e){
     if(!on)return;dx=e.clientX-x0;var dy=e.clientY-y0;
@@ -239,7 +241,7 @@ function bindSwipe(r){
     openEdit(id);
   });
   
-  r.querySelector('.a-cp').onclick=function(){copySrc=events.find(function(x){return x.id===id});render()};
+  r.querySelector('.a-cp').onclick=function(){copySrc=events.find(function(x){return x.id===id});moveMode=false;render()};
   r.querySelector('.a-dl').onclick=function(){events=events.filter(function(x){return x.id!==id});save();render()};
 }
 function panel(){
@@ -247,8 +249,9 @@ function panel(){
   var ev=selId?events.find(function(x){return x.id===selId}):null;
   if(selId&&!ev)selId=null;
   if(copySrc){
-    p.innerHTML='<div class="pt">コピー先の日付をタップ</div><div class="ps">「'+esc((copySrc.stamp?copySrc.stamp+' ':'')+copySrc.title)+'」をコピーします。月は左右スワイプか「‹ ›」で切り替えられます。</div><div class="row btns"><button class="pri" id="pdone">完了</button></div>';
-    $('#pdone').onclick=function(){copySrc=null;render()};return;
+    p.innerHTML='<div class="pt">'+(moveMode?'移動':'コピー')+'先の日付をタップ</div><div class="ps">「'+esc((copySrc.stamp?copySrc.stamp+' ':'')+copySrc.title)+'」を'+(moveMode?'移動':'コピー')+'します。月は左右スワイプか「‹ ›」で切り替えられます。</div><div class="row btns"><button id="pm-cp'+(moveMode?'':'" class="on')+'">コピー</button><button id="pm-mv'+(moveMode?'" class="on':'')+'">移動</button><button class="pri" id="pdone">'+(moveMode?'キャンセル':'完了')+'</button></div>';
+    $('#pdone').onclick=function(){copySrc=null;moveMode=false;render()};
+    $('#pm-cp').onclick=function(){moveMode=false;render()};$('#pm-mv').onclick=function(){moveMode=true;render()};return;
   }
   if(ev){
     p.innerHTML='<div class="pt"><span class="dot" style="display:inline-block;background:'+ev.color+'"></span> '+esc((ev.stamp?ev.stamp+' ':'')+ev.title)+'</div><div class="ps">'+fmtD(ev.date)+'　'+(ev.allDay?'終日':esc(ev.start||'')+(ev.end?' 〜 '+esc(ev.end):''))+(cnames[ev.color]?'　・'+esc(cnames[ev.color]):'')+'</div>'+(ev.memo?'<div class="pm">'+esc(ev.memo)+'</div>':'')+'<div class="row btns"><button id="pb">‹ 一覧</button><button class="del" id="pdl">削除</button><button id="pcp">コピー</button><button class="pri" id="ped">編集</button></div>';
@@ -260,7 +263,7 @@ function panel(){
   }
   var list=events.filter(function(e){return inDay(e,sel)}).sort(cmp);
   h='<div class="pt">'+fmtD(sel)+'</div>';
-  list.forEach(function(e){h+='<div class="swr" data-id="'+e.id+'"><div class="acts"><button class="a-cp">コピー</button><button class="a-dl">削除</button></div><div class="item"><span class="dot" style="background:'+e.color+'"></span><span>'+esc((e.stamp?e.stamp+' ':'')+e.title)+' <small>'+(e.allDay?'終日':esc(e.start||'')+(e.end?'〜'+esc(e.end):''))+(isM(e)?' '+e.date.slice(5).replace('-','/')+'〜'+e.endDate.slice(5).replace('-','/'):'')+'</small></span></div></div>'});
+  list.forEach(function(e){h+='<div class="swr" data-id="'+e.id+'"><div class="acts"><button class="a-cp">移動・コピー</button><button class="a-dl">削除</button></div><div class="item"><span class="dot" style="background:'+e.color+'"></span><span>'+esc((e.stamp?e.stamp+' ':'')+e.title)+' <small>'+(e.allDay?'終日':esc(e.start||'')+(e.end?'〜'+esc(e.end):''))+(isM(e)?' '+e.date.slice(5).replace('-','/')+'〜'+e.endDate.slice(5).replace('-','/'):'')+'</small></span></div></div>'});
   if(!list.length)h+='<div class="ps">予定はありません（「＋追加」で追加）</div>';
   p.innerHTML=h;
   p.querySelectorAll('.swr').forEach(bindSwipe);
